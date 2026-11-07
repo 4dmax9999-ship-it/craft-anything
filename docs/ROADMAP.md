@@ -838,8 +838,19 @@ Owner: maintainers · Status: in progress
 - [ ] Run `apple_calls_observe` on a Mac against a small program with `lldb` (the #251 probe):
       the hit for `alpha` is recorded, and a program lldb can't debug says so
 - [ ] Window capture tried on macOS and Linux (only Windows so far); games behind a launcher
-- [ ] Short scripted input sessions (enigo) to record screens of the original
+- [x] Short scripted input sessions (enigo) to record screens of the original
       — claimed: 4DMAX, branch feature/r2.4-scripted-input
+      `native_input_record` (Windows, macOS): keys, chords, typing, pointer moves and clicks in
+      the program's own window, with pictures at the start, at `picture` steps and at the end.
+      Nothing is sent unless that window is in front, checked before every event and while a key
+      is held; held keys are always released. Tested with stand-in input and windows only
+- [ ] Run `native_input_record` live on Windows and macOS: a small window program with a text
+      field (typed text shows in the end picture), then a real game behind a launcher
+- [ ] Games that read keyboard scan codes or raw input may ignore the virtual keys
+      `native_input_record` sends: send scan codes too, and say in the evidence when the
+      pictures before and after a step don't differ
+- [ ] `native_input_record` on Linux (X11 through enigo's x11rb; Wayland needs a portal), with
+      window capture there
 
 ### R2.5 Behaviour checks for non-web builds
 Owner: open · Status: in progress
