@@ -156,7 +156,7 @@ fn direction(down: bool) -> enigo::Direction {
 fn system_key(key: Key) -> enigo::Key {
     use enigo::Key as K;
     match key {
-        Key::Char(c) => K::Unicode(c),
+        Key::Char(c) => physical_key(c).map_or(K::Unicode(c), K::Other),
         Key::Space => K::Space,
         Key::Enter => K::Return,
         Key::Escape => K::Escape,
@@ -189,6 +189,62 @@ fn system_key(key: Key) -> enigo::Key {
         // `Key::named` only makes F1–F12.
         Key::F(_) => K::F12,
     }
+}
+
+/// The key in a letter's or digit's place on a US keyboard, whatever layout is in use: a script's
+/// `w` is the key a game reads as forward, not whatever key types "w" in the current layout. As a
+/// character, enigo maps it through the layout of the window in front, and where that layout has
+/// no such key (Arabic, Russian…) it types the character as text on both the press and the
+/// release, ignoring Shift: a live Shift+C typed "cc".
+#[cfg(windows)]
+fn physical_key(c: char) -> Option<u32> {
+    // Virtual-key codes: 'A'–'Z' are 0x41–0x5A and '0'–'9' are 0x30–0x39, their ASCII values.
+    c.is_ascii_alphanumeric().then(|| u32::from(c.to_ascii_uppercase()))
+}
+
+/// The same on a Mac: its ANSI key codes (`kVK_ANSI_*`), which name places on the keyboard.
+#[cfg(target_os = "macos")]
+fn physical_key(c: char) -> Option<u32> {
+    const CODES: &[(char, u32)] = &[
+        ('a', 0x00),
+        ('s', 0x01),
+        ('d', 0x02),
+        ('f', 0x03),
+        ('h', 0x04),
+        ('g', 0x05),
+        ('z', 0x06),
+        ('x', 0x07),
+        ('c', 0x08),
+        ('v', 0x09),
+        ('b', 0x0B),
+        ('q', 0x0C),
+        ('w', 0x0D),
+        ('e', 0x0E),
+        ('r', 0x0F),
+        ('y', 0x10),
+        ('t', 0x11),
+        ('1', 0x12),
+        ('2', 0x13),
+        ('3', 0x14),
+        ('4', 0x15),
+        ('6', 0x16),
+        ('5', 0x17),
+        ('9', 0x19),
+        ('7', 0x1A),
+        ('8', 0x1C),
+        ('0', 0x1D),
+        ('o', 0x1F),
+        ('u', 0x20),
+        ('i', 0x22),
+        ('p', 0x23),
+        ('l', 0x25),
+        ('j', 0x26),
+        ('k', 0x28),
+        ('n', 0x2D),
+        ('m', 0x2E),
+    ];
+    let c = c.to_ascii_lowercase();
+    CODES.iter().find(|(k, _)| *k == c).map(|(_, code)| *code)
 }
 
 #[cfg(any(windows, target_os = "macos"))]
@@ -246,5 +302,23 @@ mod tests {
     fn every_function_key_maps_to_its_own_system_key() {
         let keys: std::collections::BTreeSet<String> = (1..=12).map(|n| format!("{:?}", system_key(Key::F(n)))).collect();
         assert_eq!(keys.len(), 12);
+    }
+
+    /// Letters and digits are sent as places on the keyboard, never through the current layout.
+    #[cfg(any(windows, target_os = "macos"))]
+    #[test]
+    fn every_letter_and_digit_is_its_own_physical_key() {
+        let all: Vec<char> = ('a'..='z').chain('0'..='9').collect();
+        let codes: std::collections::BTreeSet<u32> = all.iter().filter_map(|c| physical_key(*c)).collect();
+        assert_eq!(codes.len(), all.len(), "each has a code of its own");
+        for c in all {
+            assert!(matches!(system_key(Key::Char(c)), enigo::Key::Other(_)), "{c}");
+            assert_eq!(physical_key(c), physical_key(c.to_ascii_uppercase()));
+        }
+        #[cfg(windows)]
+        {
+            assert_eq!(physical_key('w'), Some(0x57));
+            assert_eq!(physical_key('0'), Some(0x30));
+        }
     }
 }

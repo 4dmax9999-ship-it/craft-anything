@@ -843,9 +843,11 @@ Owner: maintainers · Status: in progress
       `native_input_record` (Windows, macOS): keys, chords, typing, pointer moves and clicks in
       the program's own window, with pictures at the start, at `picture` steps and at the end.
       Nothing is sent unless that window is in front, checked before every event and while a key
-      is held; held keys are always released. Tested with stand-in input and windows only
-- [ ] Run `native_input_record` live on Windows and macOS: a small window program with a text
-      field (typed text shows in the end picture), then a real game behind a launcher
+      is held; held keys are always released. Letters and digits are sent as physical keys.
+      Run live on Windows 11 against a probe window (typing, a chord, two clicks; see STATUS)
+- [ ] Run `native_input_record` live on macOS against a small window program (its ANSI key
+      codes for letters and digits have not been run), and on Windows against a real game
+      behind a launcher and with the person clicking elsewhere mid-script (`focus_lost`)
 - [ ] Games that read keyboard scan codes or raw input may ignore the virtual keys
       `native_input_record` sends: send scan codes too, and say in the evidence when the
       pictures before and after a step don't differ
