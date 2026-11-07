@@ -839,6 +839,7 @@ Owner: maintainers · Status: in progress
       the hit for `alpha` is recorded, and a program lldb can't debug says so
 - [ ] Window capture tried on macOS and Linux (only Windows so far); games behind a launcher
 - [ ] Short scripted input sessions (enigo) to record screens of the original
+      — claimed: 4DMAX, branch feature/r2.4-scripted-input
 
 ### R2.5 Behaviour checks for non-web builds
 Owner: open · Status: in progress
