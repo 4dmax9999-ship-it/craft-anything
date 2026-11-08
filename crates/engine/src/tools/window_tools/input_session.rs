@@ -43,7 +43,7 @@ const SLICE: Duration = Duration::from_millis(50);
 /// How long to wait for the program's window to come to the front before the first input.
 const FOCUS_WAIT: Duration = Duration::from_secs(10);
 /// How far (in screen points) the pointer may land from where it was aimed and still click.
-const POINTER_SLACK: i32 = 2;
+const POINTER_SLACK: u32 = 2;
 /// Most bytes of pictures kept inline in the evidence (all are written to `output_dir`).
 const MAX_INLINE: usize = 8 * 1024 * 1024;
 
@@ -374,7 +374,8 @@ fn to_screen(place: &WindowPlace, picture: (u32, u32), x: u32, y: u32, step: usi
 /// another window).
 fn aim(input: &mut dyn InputSink, at: (i32, i32), step: usize) -> Result<(), Stop> {
     let landed = input.pointer_to(at.0, at.1).map_err(|e| Stop { step, code: "input_failed", message: e.message })?;
-    if (landed.0 - at.0).abs() > POINTER_SLACK || (landed.1 - at.1).abs() > POINTER_SLACK {
+    // `abs_diff` can't overflow: the system may report a pointer far off any window
+    if landed.0.abs_diff(at.0) > POINTER_SLACK || landed.1.abs_diff(at.1) > POINTER_SLACK {
         return Err(Stop {
             step,
             code: "pointer_elsewhere",
@@ -541,15 +542,17 @@ fn native_input_record(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, T
     let dir = p.working_directory.clone().unwrap_or_else(|| p.program.parent().map(PathBuf::from).unwrap_or_default());
     // Room for the start, the window to come forward, every picture and the close.
     let limit = wait + script_length(&actions) + FOCUS_WAIT + Duration::from_secs(120);
-    let (mut running, _) = start_and_wait(ctx, &p.program, &p.args, &dir, wait, limit)?;
+    // A launcher that starts the real program and exits cleanly doesn't end the run (its group
+    // lives until the session is done), so the program it handed over to keeps its window.
+    let (mut running, _) = start_and_wait(ctx, &p.program, &p.args, &dir, wait, limit, true)?;
     // The process that owns the window: the program or one it started (a runner, a launcher's
-    // child). Input is only ever aimed at that process's window.
-    let root = running.pid();
+    // child), remembered across looks so a child stays the program once its launcher is gone.
+    // Input is only ever aimed at that process's window.
+    let mut family = process_tree::Family::new(running.pid());
     let late_until = Instant::now() + super::LATE_WINDOW;
     let found = process_tree::keep_looking(
         || {
-            process_tree::capture(
-                root,
+            family.capture(
                 || process_tree::snapshot(&ctx.cancel),
                 |pid| {
                     if ctx.cancel.is_cancelled() {
@@ -900,6 +903,21 @@ mod tests {
         let stop = played.stop.unwrap();
         assert_eq!(stop.code, "pointer_elsewhere");
         assert!(!input.sent.borrow().iter().any(|s| matches!(s, Sent::Button(..))), "no button was pressed");
+    }
+
+    #[test]
+    fn the_pointer_check_never_overflows_and_keeps_its_slack() {
+        // A pointer reported at the far end of the range from where it was aimed: a refusal, not
+        // a panic or a wrapped difference that passes.
+        let mut input = FakeInput { lands_at: Some((i32::MIN, i32::MIN)), ..FakeInput::default() };
+        assert_eq!(aim(&mut input, (i32::MAX, i32::MAX), 1).unwrap_err().code, "pointer_elsewhere");
+        let mut input = FakeInput { lands_at: Some((i32::MAX, 0)), ..FakeInput::default() };
+        assert_eq!(aim(&mut input, (i32::MIN, 0), 1).unwrap_err().code, "pointer_elsewhere");
+        // Within the slack still clicks; one more point doesn't.
+        let mut input = FakeInput { lands_at: Some((102, 48)), ..FakeInput::default() };
+        assert!(aim(&mut input, (100, 50), 1).is_ok());
+        let mut input = FakeInput { lands_at: Some((103, 50)), ..FakeInput::default() };
+        assert_eq!(aim(&mut input, (100, 50), 1).unwrap_err().code, "pointer_elsewhere");
     }
 
     #[test]

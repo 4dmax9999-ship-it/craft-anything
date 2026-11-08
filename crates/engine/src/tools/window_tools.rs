@@ -85,7 +85,7 @@ fn native_window_capture(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput,
     craft_anything_platform::window::check_can_see_windows()?;
     let wait = Duration::from_secs(p.wait_secs.unwrap_or(8).clamp(1, 120));
     let dir = p.working_directory.unwrap_or_else(|| p.program.parent().map(PathBuf::from).unwrap_or_default());
-    let (mut running, started) = start_and_wait(ctx, &p.program, &p.args, &dir, wait, wait + Duration::from_secs(60))?;
+    let (mut running, started) = start_and_wait(ctx, &p.program, &p.args, &dir, wait, wait + Duration::from_secs(60), false)?;
     let name = p.program.file_stem().map(|s| s.to_string_lossy().into_owned());
     let pid = running.pid();
     let late_until = Instant::now() + LATE_WINDOW;
@@ -161,7 +161,9 @@ fn native_window_capture(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput,
 }
 
 /// Start `program` in `dir` and give it `wait` to start and draw (less if it ends first). The run
-/// as a whole is limited to `limit`; a cancel stops the program and returns cancelled.
+/// as a whole is limited to `limit`; a cancel stops the program and returns cancelled. With
+/// `hands_off`, a program that exits cleanly after starting another (a launcher) doesn't end the
+/// run: what it started lives on until the caller stops it, cancels or the limit is reached.
 fn start_and_wait(
     ctx: &mut Ctx<'_>,
     program: &std::path::Path,
@@ -169,17 +171,16 @@ fn start_and_wait(
     dir: &std::path::Path,
     wait: Duration,
     limit: Duration,
+    hands_off: bool,
 ) -> Result<(craft_anything_platform::process::RunningProcess, Instant), ToolError> {
     let cancel = ctx.cancel.clone();
     ctx.report(None, format!("Starting {} for {} s…", program.display(), wait.as_secs()));
-    let mut running = Process::new(program)
-        .args(args)
-        .cwd(dir)
-        .timeout(limit)
-        .stdout_cap(64 * 1024)
-        .cancel_when(move || cancel.is_cancelled())
-        .label("the program")
-        .spawn()?;
+    let mut process = Process::new(program);
+    if hands_off {
+        process = process.hands_off();
+    }
+    let mut running =
+        process.args(args).cwd(dir).timeout(limit).stdout_cap(64 * 1024).cancel_when(move || cancel.is_cancelled()).label("the program").spawn()?;
     let started = Instant::now();
     while started.elapsed() < wait {
         if ctx.cancel.is_cancelled() {
