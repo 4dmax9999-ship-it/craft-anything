@@ -376,6 +376,12 @@ been run live.
 - [x] Keep the retry condition when `Action:` or `Final Answer:` appears between fenced
       calls, without rejecting ordinary words between calls (PR #1031 review)
       — claimed: Codex, branch bugfix/r5.4-fenced-call-followup
+- [x] A call to a tool that isn't offered comes back from a llama.cpp server as text in Qwen's
+      markup (`<tool_call><function=web_search><parameter=query>…`), and the loop takes it as the
+      final answer: a live build on a 512k-window Qwen model stopped at its second check in 3
+      minutes. Read that markup as a call when it names an offered tool; when it names one that
+      isn't, say so and name the tools it has, and ask again
+      — claimed: youkaicountry, branch bugfix/r5.4-text-tool-calls
 - [ ] A local builder spends its rounds on the project file and never writes the app: run 4 had a
       compiling `Cargo.toml` by check 3, its last, with `main.rs` still "Hello, world!". See whether
       more rounds get there, or whether a small model needs the window and the `--screenshot`
@@ -422,6 +428,17 @@ been run live.
 - [ ] Find how each local server is told its context size and set it, or stop with a plain message
       when the prompt won't fit. We assume 24k and send no `num_ctx`, which an OpenAI-style endpoint
       may ignore anyway; LM Studio refused a 12.6k prompt on its 8k default (#73)
+- [x] A builder that can't see pictures (the API loop) is told it can't, then sent to open
+      screenshots with Read: the website capture lines and the `--screenshot` and reference-picture
+      lines in `brief.rs`, the website check's "Open each pair", the reminder after each round, the
+      `--screenshot` contract and `capture/README.md`'s window picture. Give it only what it can
+      use, and say what the check measures instead. `BriefCx::sees_pictures` (today: not the API
+      loop) picks the wording: a website's `layouts` and each round's `capture.json`, a program's
+      `ui-tree.json` and the check's likeness, and asking the person what their pictures show
+      — claimed: youkaicountry, branch bugfix/r5.4-blind-builder-prompts
+- [ ] The carry-on and follow-up prompts (`continue_prompt`, `follow_up`) ask an API-loop builder
+      to check its work with rebuild_check, which the loop refuses while it builds; only its first
+      message says so. Say "Craft Anything checks it after your turn" there instead
 - [x] When a server refuses a request for its context window and says the size (Ollama, llama.cpp,
       OpenAI-style), fit the conversation to that window and ask once more, else say how to raise it (#962)
 - [x] A per-backend context budget in `[[ai.backends]]` (`LoopConfig::context_tokens` exists), for
@@ -874,12 +891,17 @@ Owner: maintainers · Status: in progress
       — claimed: 4DMAX, branch feature/r2.4-scripted-input
       `native_input_record` (Windows, macOS): keys, chords, typing, pointer moves and clicks in
       the program's own window, with pictures at the start, at `picture` steps and at the end.
-      Nothing is sent unless that window is in front, checked before every event and while a key
-      is held; held keys are always released. Letters and digits are sent as physical keys.
+      Nothing is sent unless that window is in front, checked before each key, chord, move and
+      click and while a key is held (a `type` step once, before its text); held keys are always
+      released, also after focus is lost. Letters and digits are sent as keys, not characters:
+      on a Mac by position (ANSI key codes); on Windows as virtual keys, which follow the layout
+      in front, so on AZERTY or Dvorak a letter isn't at its QWERTY place.
       Run live on Windows 11 against a probe window (typing, a chord, two clicks; see STATUS)
 - [ ] Run `native_input_record` live on macOS against a small window program (its ANSI key
       codes for letters and digits have not been run), and on Windows against a real game
       behind a launcher and with the person clicking elsewhere mid-script (`focus_lost`)
+- [ ] Keep track of a launcher's children during the start wait, so one that exits before the
+      window search begins can't leave its child unfound on macOS and Linux (reparented)
 - [ ] Games that read keyboard scan codes or raw input may ignore the virtual keys
       `native_input_record` sends: send scan codes too, and say in the evidence when the
       pictures before and after a step don't differ
@@ -933,7 +955,11 @@ Owner: open · Status: in progress
       `main.go` — claimed: Afloat16, branch feature/r2.7-go-command-layouts
 - [x] Launch the single installed console script of a Python project from its virtual environment
       — claimed: Afloat16, branch feature/r2.7-python-console-entrypoint
-- [ ] Extend launch recipes to Java build outputs; build checks already use their toolchain commands
+- [x] Extend launch recipes to Java build outputs and Python packages; build checks already use
+      their toolchain commands. A single `<name>/__main__.py` runs as `python3 -m <name>`, the
+      single runnable jar in `target/` or `build/libs/` with `java -jar` (Maven now builds with
+      `package`); build wrappers stay out of launch
+      — PR #1209; claimed: rmsff, branch feature/r2.7-python-java-launch
 - [ ] Audit relative project placements in build, option-run and Play paths too: runtime window
       capture now normalizes its request paths, but earlier runner paths can still be relative
 - [x] Resolve Godot's project argument and the local Electron binary and project argument before
@@ -1017,9 +1043,18 @@ Gaps found while using the app for real projects.
       note's hand-over file carries the answers, and the after-turn path puts them before the
       notes; only answers the run's mode may show, marked told when read or sent
       — claimed: AlexJoaquimPereira, branch bugfix/r2.9-note-just-ask; commit 78d3963
-- [ ] Record which mode a builder's session ran in: `agent_session` is kept across modes, so a Clean
+- [x] Record which mode a builder's session ran in: `agent_session` is kept across modes, so a Clean
       room build or question can resume a session from a Deep build and carry what it read, and such
       a question's answer is recorded as asked in Clean room. Don't resume one for Clean room
+      — `agent_session_deep` in `craft.json` records it (one saved before the field counts as Deep);
+      a mismatch starts from the brief, and a question is answered from the files; tests cover both
+      directions and the legacy case. Claimed: AlexJoaquimPereira, branch bugfix/r2.9-session-mode
+- [x] The shared investigation chat (`SharedConversation`) doesn't continue a Deep chat's agent
+      session once the chat is in Clean room; Clean room to Deep still continues — claimed: rmsff,
+      branch fix/r2.9-shared-chat-mode
+- [ ] A Clean room build or question must also not resume an API backend's kept transcript:
+      `ws.transcript_path()` is loaded whenever it exists, so switching modes can carry what a Deep
+      API build read. Clear it, or record its mode, when the mode changes; add a regression
 - [x] #504: the builder's plan card can be folded away with its X, or with `project_plan_fold`
       (between builds: a fold during a build can be overwritten by its next save). The steps stay
       in the conversation (`FEED_VERSION` 4, `FeedItem::PlanDismissed`), and a later run's
@@ -1219,6 +1254,11 @@ Owner: open · Status: in progress
       — claimed: Afloat16, branch bugfix/r3.12-asar-limit-bounds-20261107
 - [x] Keep .NET bundle member reads before the manifest.
       — claimed: Afloat16, branch bugfix/r3.12-dotnet-data-bounds-20261107
+- [x] SQLite TEXT values cut at the 4 KiB cap can end in a spurious U+FFFD when the cut lands
+      inside a character; cut at a UTF-8/UTF-16 boundary and keep the `truncated` flag
+      — tests cover a UTF-8 character, a UTF-16 surrogate pair and a UTF-16 continuation-like
+      byte at the cut; invalid bytes keep their lossy prefix. Claimed: AlexJoaquimPereira,
+      branch bugfix/r3.12-sqlite-text-cap
 - [x] Require a complete DNS question's type and class fields before retaining it, and keep
       truncated questions out of packet inventories while reporting the incomplete message
       — claimed: Afloat16, branch bugfix/r3.12-dns-question-class-review-20261104
@@ -1328,6 +1368,9 @@ Owner: open · Status: in progress
       — claimed: Afloat16, branch bugfix/r3.12-dns-rdata-names-review-20261104
 - [x] Keep address and service records attached to their owner and validate the record's wire fields.
       — claimed: Afloat16, branch bugfix/r3.12-dns-record-evidence
+- [x] Accept binary plist arrays and sets that name one stored value many times; repeated data and
+      text spend a byte budget, and containers past the node cap are refused before reserving space.
+      — claimed: Plastic-time, branch bugfix/r3.12-plist-shared-array-values
 
 ### R3.13 Web inspection correctness
 Owner: open · Status: in progress
