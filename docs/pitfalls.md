@@ -161,6 +161,12 @@ Negative probes use loopback port zero so another fixture cannot acquire a relea
 A controlled fragmented request reproduced the fixture defect; the old CI log did not preserve
 the probe's underlying error, so it does not establish that failure's cause.
 
+**A socket option set after the peer reset it.** A preview test set its clients' read timeout
+after stopping the server. macOS answers `setsockopt` with `Invalid argument` on a socket closed in
+both directions (a reset, or the peer's FIN after our own `shutdown(Write)`); Linux doesn't check,
+so the test failed only on Macs. Set socket options right after connecting, before anything can
+close the connection.
+
 **A script written and run at once.** Tests that write a stand-in program and start it failed now
 and then on Linux with "Text file busy": another test thread was starting a child at that moment,
 and the child still held the new file open for writing. Starting a program goes through
@@ -625,6 +631,11 @@ on Windows (`write_atomic`); show errors where the person is looking.
 `env` values included, which can hold API keys; a tool's output reaches the journal and MCP
 clients. The journal only redacts by field name. When a setting can hold a secret, hide its value
 in every tool that prints settings, and test that it doesn't appear.
+
+**A secret check that matched a word inside a name.** `cargo xtask secrets` took any variable
+with `AUTH` in its name as a secret; git sets `GIT_AUTHOR_NAME` while the hook runs, so a contributor
+whose git name is their handle couldn't commit their own roadmap claim. Name the exceptions
+(`NOT_SECRET`) rather than loosening the word, and test both sides with a list of variables.
 
 **Secret files kept out only by one person's gitignore.** `.env` files and
 `.claude/settings.local.json` were ignored by a contributor's global gitignore, not the repo's, so
