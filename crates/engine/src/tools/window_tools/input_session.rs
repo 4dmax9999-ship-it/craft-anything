@@ -44,7 +44,8 @@ const SLICE: Duration = Duration::from_millis(50);
 const FOCUS_WAIT: Duration = Duration::from_secs(10);
 /// How far (in screen points) the pointer may land from where it was aimed and still click.
 const POINTER_SLACK: u32 = 2;
-/// Most bytes of pictures kept inline in the evidence (all are written to `output_dir`).
+/// Most bytes of pictures kept inline in the evidence. All are written to `output_dir` when it's
+/// given; without it, pictures past this limit are kept nowhere.
 const MAX_INLINE: usize = 8 * 1024 * 1024;
 
 pub(super) fn spec() -> ToolSpec {
@@ -78,6 +79,7 @@ pub struct SessionParams {
     /// What to do, in order (at most 100 steps; waits and holds at most 120 s in all).
     pub steps: Vec<Step>,
     /// Save every picture here as `NN-label.png` (an absolute path; it's created if missing).
+    /// Without it, only the first 8 MiB of pictures come back, inline.
     #[serde(default)]
     pub output_dir: Option<PathBuf>,
 }
